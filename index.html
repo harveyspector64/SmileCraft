@@ -163,29 +163,43 @@
         }
 
         .cursor-brush {
-            width: 30px;
-            height: 60px;
+            width: 25px;
+            height: 120px;
             background: linear-gradient(135deg, #FFE135, #FFA502);
-            border-radius: 15px 15px 5px 5px;
+            border-radius: 12px 12px 3px 3px;
             border: 2px solid #333;
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            position: relative;
         }
 
         .cursor-brush::after {
             content: '';
             position: absolute;
-            bottom: -10px;
+            bottom: -8px;
             left: 50%;
             transform: translateX(-50%);
-            width: 8px;
-            height: 15px;
+            width: 6px;
+            height: 12px;
             background: #8B4513;
-            border-radius: 0 0 4px 4px;
+            border-radius: 0 0 3px 3px;
+        }
+
+        .cursor-brush::before {
+            content: '';
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 3px;
+            background: #ff0000;
+            border-radius: 50%;
+            z-index: 10;
         }
 
         .cursor-scaler {
-            width: 25px;
-            height: 70px;
+            width: 20px;
+            height: 130px;
             background: linear-gradient(135deg, #C0C0C0, #808080);
             border: 2px solid #333;
             border-radius: 2px;
@@ -196,22 +210,35 @@
         .cursor-scaler::after {
             content: '';
             position: absolute;
-            bottom: -5px;
+            bottom: -8px;
             left: 50%;
             transform: translateX(-50%);
             width: 0;
             height: 0;
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-top: 10px solid #666;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 12px solid #666;
+        }
+
+        .cursor-scaler::before {
+            content: '';
+            position: absolute;
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 3px;
+            background: #ff0000;
+            border-radius: 50%;
+            z-index: 10;
         }
 
         .cursor-drill {
-            width: 30px;
-            height: 65px;
+            width: 25px;
+            height: 125px;
             background: linear-gradient(135deg, #FF4757, #FF3742);
             border: 2px solid #333;
-            border-radius: 8px 8px 4px 4px;
+            border-radius: 8px 8px 2px 2px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.3);
             position: relative;
         }
@@ -219,18 +246,31 @@
         .cursor-drill::after {
             content: '';
             position: absolute;
-            bottom: -8px;
+            bottom: -10px;
             left: 50%;
             transform: translateX(-50%);
-            width: 4px;
-            height: 12px;
+            width: 3px;
+            height: 15px;
             background: #333;
-            border-radius: 2px;
+            border-radius: 1px;
+        }
+
+        .cursor-drill::before {
+            content: '';
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 3px;
+            background: #ff0000;
+            border-radius: 50%;
+            z-index: 10;
         }
 
         .cursor-rinse {
-            width: 35px;
-            height: 50px;
+            width: 30px;
+            height: 110px;
             background: linear-gradient(135deg, #3DAFFF, #2ED573);
             border: 2px solid #333;
             border-radius: 8px;
@@ -241,10 +281,23 @@
         .cursor-rinse::after {
             content: '💧';
             position: absolute;
-            bottom: -15px;
+            bottom: -20px;
             left: 50%;
             transform: translateX(-50%);
             font-size: 12px;
+        }
+
+        .cursor-rinse::before {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 3px;
+            height: 3px;
+            background: #ff0000;
+            border-radius: 50%;
+            z-index: 10;
         }
 
         .particle {
@@ -399,9 +452,21 @@
                 this.mouse.x = clientX - rect.left;
                 this.mouse.y = clientY - rect.top;
                 
-                // Position tool cursor offset below finger
+                // Position tool cursor offset below finger with precise tip calculation
                 this.mouse.toolX = this.mouse.x;
-                this.mouse.toolY = this.mouse.y - 60; // Offset above touch point
+                this.mouse.toolY = this.mouse.y - 100; // Position tool above finger
+                
+                // Calculate precise tool tip position for hit detection
+                let tipOffsetY = 0;
+                switch(this.currentTool) {
+                    case 'brush': tipOffsetY = 125; break;  // tip of brush bristles
+                    case 'scaler': tipOffsetY = 133; break; // tip of scaler point
+                    case 'drill': tipOffsetY = 130; break;  // tip of drill bit
+                    case 'rinse': tipOffsetY = 110; break;  // rinse nozzle
+                }
+                
+                this.mouse.tipX = this.mouse.x;
+                this.mouse.tipY = this.mouse.y - 100 + tipOffsetY; // Actual working tip position
                 
                 // Update visual cursor
                 this.toolCursor.style.left = (rect.left + this.mouse.x - 15) + 'px';
@@ -602,9 +667,6 @@
                 // Draw particles
                 this.drawParticles();
                 
-                // Draw tool cursor
-                this.drawToolCursor();
-                
                 // Draw drill heat bar
                 if (this.drillHeat > 0 || this.drillCharging) {
                     this.drawDrillHeat();
@@ -744,26 +806,6 @@
                 });
             }
             
-            drawToolCursor() {
-                if (!this.mouse.down || !this.gameRunning) return;
-                
-                const size = this.currentTool === 'drill' ? 12 : 8;
-                
-                this.ctx.strokeStyle = '#4CAF50';
-                this.ctx.lineWidth = 2;
-                this.ctx.beginPath();
-                this.ctx.arc(this.mouse.x, this.mouse.y, size, 0, Math.PI * 2);
-                this.ctx.stroke();
-                
-                if (this.currentTool === 'drill' && this.drillCharging) {
-                    const chargeSize = size + (this.drillCharge / 100) * 10;
-                    this.ctx.strokeStyle = `rgba(255, 0, 0, ${this.drillCharge / 100})`;
-                    this.ctx.beginPath();
-                    this.ctx.arc(this.mouse.x, this.mouse.y, chargeSize, 0, Math.PI * 2);
-                    this.ctx.stroke();
-                }
-            }
-            
             drawDrillHeat() {
                 const barWidth = 100;
                 const barHeight = 10;
@@ -804,18 +846,18 @@
             }
             
             useBrush() {
-                const range = 25; // Larger, more forgiving range
+                const range = 20; // Precise range for brush tip
                 let cleaned = false;
                 
                 this.problems = this.problems.filter(problem => {
                     if (problem.type === 'plaque') {
                         const dist = Math.sqrt(
-                            (problem.x - this.mouse.toolX) ** 2 + 
-                            (problem.y - this.mouse.toolY) ** 2
+                            (problem.x - this.mouse.tipX) ** 2 + 
+                            (problem.y - this.mouse.tipY) ** 2
                         );
                         
                         if (dist < range) {
-                            problem.health -= 25; // Much more aggressive damage
+                            problem.health -= 25;
                             
                             this.createParticles(
                                 problem.x, problem.y, '230, 230, 0', 
@@ -837,7 +879,6 @@
                     return true;
                 });
                 
-                // Much less penalty for missing
                 if (!cleaned && Math.random() < 0.05) {
                     this.comfort = Math.max(0, this.comfort - 1);
                 }
@@ -846,18 +887,17 @@
             }
             
             useScaler() {
-                const range = 20; // Larger range
+                const range = 15; // Precise targeting for scaler point
                 let cleaned = false;
                 
                 this.problems = this.problems.filter(problem => {
                     if (problem.type === 'tartar') {
                         const dist = Math.sqrt(
-                            (problem.x - this.mouse.toolX) ** 2 + 
-                            (problem.y - this.mouse.toolY) ** 2
+                            (problem.x - this.mouse.tipX) ** 2 + 
+                            (problem.y - this.mouse.tipY) ** 2
                         );
                         
                         if (dist < range) {
-                            // Instant removal for tartar - more satisfying
                             this.createParticles(
                                 problem.x, problem.y, '93, 69, 19', 
                                 8, { speed: 3, gravity: 0.8, chunky: true }
@@ -874,7 +914,6 @@
                     return true;
                 });
                 
-                // Less penalty
                 if (!cleaned && Math.random() < 0.03) {
                     this.comfort = Math.max(0, this.comfort - 2);
                 }
@@ -883,18 +922,18 @@
             }
             
             performDrill() {
-                const range = 15;
+                const range = 12; // Very precise for drill tip
                 let drilled = false;
                 
                 this.problems = this.problems.filter(problem => {
                     if (problem.type === 'cavity') {
                         const dist = Math.sqrt(
-                            (problem.x - this.mouse.toolX) ** 2 + 
-                            (problem.y - this.mouse.toolY) ** 2
+                            (problem.x - this.mouse.tipX) ** 2 + 
+                            (problem.y - this.mouse.tipY) ** 2
                         );
                         
                         if (dist < range) {
-                            const damage = this.drillCharge * 1.2; // More effective
+                            const damage = this.drillCharge * 1.2;
                             problem.health -= damage;
                             this.drillHeat = Math.min(100, this.drillHeat + 25);
                             this.createParticles(problem.x, problem.y, '26, 26, 26', 6);
@@ -914,14 +953,14 @@
                 });
                 
                 if (!drilled) {
-                    this.comfort = Math.max(0, this.comfort - 3); // Less harsh
+                    this.comfort = Math.max(0, this.comfort - 3);
                 }
                 
                 this.updateHUD();
             }
             
             useRinse() {
-                const range = 50; // Much larger range for rinse
+                const range = 35; // Good range for water spray
                 
                 this.drillHeat = Math.max(0, this.drillHeat - 40);
                 
@@ -929,26 +968,26 @@
                 this.particles = this.particles.filter(() => Math.random() < 0.3);
                 const washedAway = beforeCount - this.particles.length;
                 
-                // Create water spray at tool position
+                // Create water spray at tool tip
                 for (let i = 0; i < 12; i++) {
                     this.createParticles(
-                        this.mouse.toolX + (Math.random() - 0.5) * 30,
-                        this.mouse.toolY + (Math.random() - 0.5) * 30,
+                        this.mouse.tipX + (Math.random() - 0.5) * 25,
+                        this.mouse.tipY + (Math.random() - 0.5) * 25,
                         '100, 180, 255',
                         1,
                         { speed: 4, gravity: 0.2, water: true }
                     );
                 }
                 
-                // Use tool position for rinse effects
+                // Use tool tip position for rinse effects
                 this.problems.forEach(problem => {
                     const dist = Math.sqrt(
-                        (problem.x - this.mouse.toolX) ** 2 + 
-                        (problem.y - this.mouse.toolY) ** 2
+                        (problem.x - this.mouse.tipX) ** 2 + 
+                        (problem.y - this.mouse.tipY) ** 2
                     );
                     
                     if (dist < range && problem.type === 'plaque') {
-                        problem.health -= 5; // More effective
+                        problem.health -= 5;
                         if (problem.health <= 0) {
                             this.score += 5;
                             this.createSuccessEffect(problem.x, problem.y, '+5');
@@ -959,7 +998,7 @@
                 this.problems = this.problems.filter(p => p.health > 0);
                 
                 if (washedAway > 3) {
-                    this.createSuccessEffect(this.mouse.toolX, this.mouse.toolY, `Clean!`);
+                    this.createSuccessEffect(this.mouse.tipX, this.mouse.tipY, `Clean!`);
                     this.score += Math.floor(washedAway / 2);
                 }
                 
