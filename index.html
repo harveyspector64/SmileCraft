@@ -385,7 +385,50 @@
                 this.toolbarTimeout = null;
                 this.toolCursor = document.getElementById('toolCursor');
                 
+                this.audioContext = null;
+                this.soundEnabled = true;
+                this.initAudio();
                 this.init();
+            }
+            
+            initAudio() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    console.log('Web Audio not supported');
+                    this.soundEnabled = false;
+                }
+            }
+            
+            playRealSound(type, frequency = 440, duration = 0.1, volume = 0.1) {
+                if (!this.soundEnabled || !this.audioContext) return;
+                
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                
+                const soundParams = {
+                    'scrub': { freq: 200 + Math.random() * 100, type: 'sawtooth', vol: 0.05 },
+                    'chip': { freq: 800 + Math.random() * 400, type: 'square', vol: 0.08 },
+                    'drill': { freq: 150 + Math.random() * 50, type: 'sawtooth', vol: 0.06 },
+                    'rinse': { freq: 300 + Math.random() * 200, type: 'sine', vol: 0.04 },
+                    'success': { freq: 523, type: 'sine', vol: 0.1 }, // C note
+                    'warning': { freq: 220, type: 'triangle', vol: 0.08 }
+                };
+                
+                const params = soundParams[type] || soundParams['scrub'];
+                
+                oscillator.frequency.setValueAtTime(params.freq, this.audioContext.currentTime);
+                oscillator.type = params.type;
+                
+                gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(params.vol, this.audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
+                
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + duration);
             }
             
             init() {
@@ -411,6 +454,12 @@
                 this.canvas.addEventListener('touchmove', this.handleMove.bind(this));
                 this.canvas.addEventListener('touchend', this.handleEnd.bind(this));
                 
+                // Sound toggle
+                document.getElementById('soundToggle').addEventListener('click', () => {
+                    this.soundEnabled = !this.soundEnabled;
+                    document.getElementById('soundToggle').textContent = this.soundEnabled ? '🔊' : '🔇';
+                });
+                
                 // Restart button
                 document.getElementById('restartBtn').addEventListener('click', () => {
                     this.restartGame();
@@ -423,6 +472,11 @@
             handleStart(e) {
                 e.preventDefault();
                 if (!this.gameRunning) return;
+                
+                // Resume audio context on first user interaction
+                if (this.audioContext && this.audioContext.state === 'suspended') {
+                    this.audioContext.resume();
+                }
                 
                 const rect = this.canvas.getBoundingClientRect();
                 const clientX = e.clientX || (e.touches && e.touches[0].clientX);
@@ -452,23 +506,24 @@
                 this.mouse.x = clientX - rect.left;
                 this.mouse.y = clientY - rect.top;
                 
-                // Position tool cursor offset below finger with precise tip calculation
+                // Position tool way above finger so finger stays below mouth area
+                const toolLength = 140;
                 this.mouse.toolX = this.mouse.x;
-                this.mouse.toolY = this.mouse.y - 100; // Position tool above finger
+                this.mouse.toolY = this.mouse.y - toolLength;
                 
-                // Calculate precise tool tip position for hit detection
-                let tipOffsetY = 0;
+                // Calculate precise tool tip position - THIS is where the action happens
+                let tipOffset = 0;
                 switch(this.currentTool) {
-                    case 'brush': tipOffsetY = 125; break;  // tip of brush bristles
-                    case 'scaler': tipOffsetY = 133; break; // tip of scaler point
-                    case 'drill': tipOffsetY = 130; break;  // tip of drill bit
-                    case 'rinse': tipOffsetY = 110; break;  // rinse nozzle
+                    case 'brush': tipOffset = 137; break;  // tip of brush bristles
+                    case 'scaler': tipOffset = 142; break; // tip of scaler point
+                    case 'drill': tipOffset = 140; break;  // tip of drill bit
+                    case 'rinse': tipOffset = 120; break;  // rinse nozzle
                 }
                 
                 this.mouse.tipX = this.mouse.x;
-                this.mouse.tipY = this.mouse.y - 100 + tipOffsetY; // Actual working tip position
+                this.mouse.tipY = this.mouse.y - tipOffset; // This is the actual working position
                 
-                // Update visual cursor
+                // Update visual cursor - positioned so tip aligns with working area
                 this.toolCursor.style.left = (rect.left + this.mouse.x - 15) + 'px';
                 this.toolCursor.style.top = (rect.top + this.mouse.toolY) + 'px';
                 this.toolCursor.style.opacity = this.mouse.down ? '1' : '0';
@@ -610,9 +665,14 @@
             }
             
             update() {
-                // Update drill charging
+                // Update drill charging with sound
                 if (this.drillCharging) {
                     this.drillCharge = Math.min(100, this.drillCharge + 2);
+                    
+                    // Drill charging sound
+                    if (this.drillCharge % 20 === 0) {
+                        this.playRealSound('drill', 150 + this.drillCharge, 0.05);
+                    }
                 }
                 
                 // Cool down drill heat
@@ -635,10 +695,13 @@
                         particle.rotation += particle.rotationSpeed;
                     }
                     
-                    // Bounce off mouth floor
+                    // Bounce off mouth floor with sound
                     if (particle.y > 400 && particle.vy > 0) {
                         particle.vy *= -0.3;
                         particle.y = 400;
+                        if (Math.random() < 0.1) {
+                            this.playRealSound('chip', 600, 0.03, 0.02);
+                        }
                     }
                     
                     return particle.life > 0;
@@ -864,13 +927,14 @@
                                 6, { speed: 2, gravity: 0.3 }
                             );
                             
-                            this.playSound('scrub');
+                            this.playRealSound('scrub');
                             cleaned = true;
                             
                             if (problem.health <= 0) {
                                 this.score += 10;
                                 this.comfort = Math.min(100, this.comfort + 1);
                                 this.createSuccessEffect(problem.x, problem.y, '+10');
+                                this.playRealSound('success');
                                 this.vibrate(25);
                                 return false;
                             }
@@ -903,9 +967,10 @@
                                 8, { speed: 3, gravity: 0.8, chunky: true }
                             );
                             this.createSuccessEffect(problem.x, problem.y, '+15');
-                            this.playSound('chip');
+                            this.playRealSound('chip');
                             this.score += 15;
                             this.comfort = Math.min(100, this.comfort + 1);
+                            this.playRealSound('success');
                             this.vibrate(50);
                             cleaned = true;
                             return false;
@@ -937,6 +1002,7 @@
                             problem.health -= damage;
                             this.drillHeat = Math.min(100, this.drillHeat + 25);
                             this.createParticles(problem.x, problem.y, '26, 26, 26', 6);
+                            this.playRealSound('drill', 100 + this.drillCharge, 0.2);
                             this.screenShake();
                             drilled = true;
                             
@@ -944,6 +1010,7 @@
                                 this.score += 25;
                                 this.comfort = Math.min(100, this.comfort + 2);
                                 this.createSuccessEffect(problem.x, problem.y, '+25');
+                                this.playRealSound('success');
                                 this.vibrate(60);
                                 return false;
                             }
@@ -1002,7 +1069,7 @@
                     this.score += Math.floor(washedAway / 2);
                 }
                 
-                this.playSound('rinse');
+                this.playRealSound('rinse', 300, 0.3);
                 this.vibrate(40);
                 this.updateHUD();
             }
@@ -1119,6 +1186,11 @@
                 
                 const bonus = Math.floor(this.timeLeft * 5) + Math.floor(this.comfort * 2);
                 this.score += bonus;
+                
+                // Victory fanfare
+                this.playRealSound('success', 523, 0.2, 0.15); // C
+                setTimeout(() => this.playRealSound('success', 659, 0.2, 0.15), 150); // E
+                setTimeout(() => this.playRealSound('success', 784, 0.4, 0.2), 300); // G
                 
                 const perfectEl = document.createElement('div');
                 perfectEl.className = 'perfect-smile';
