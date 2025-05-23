@@ -154,6 +154,99 @@
             background: #45a049;
         }
 
+        #toolCursor {
+            position: absolute;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            opacity: 0;
+            z-index: 100;
+        }
+
+        .cursor-brush {
+            width: 30px;
+            height: 60px;
+            background: linear-gradient(135deg, #FFE135, #FFA502);
+            border-radius: 15px 15px 5px 5px;
+            border: 2px solid #333;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .cursor-brush::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 15px;
+            background: #8B4513;
+            border-radius: 0 0 4px 4px;
+        }
+
+        .cursor-scaler {
+            width: 25px;
+            height: 70px;
+            background: linear-gradient(135deg, #C0C0C0, #808080);
+            border: 2px solid #333;
+            border-radius: 2px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        .cursor-scaler::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 10px solid #666;
+        }
+
+        .cursor-drill {
+            width: 30px;
+            height: 65px;
+            background: linear-gradient(135deg, #FF4757, #FF3742);
+            border: 2px solid #333;
+            border-radius: 8px 8px 4px 4px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        .cursor-drill::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 12px;
+            background: #333;
+            border-radius: 2px;
+        }
+
+        .cursor-rinse {
+            width: 35px;
+            height: 50px;
+            background: linear-gradient(135deg, #3DAFFF, #2ED573);
+            border: 2px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        .cursor-rinse::after {
+            content: '💧';
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+        }
+
         .particle {
             position: absolute;
             pointer-events: none;
@@ -183,7 +276,6 @@
             animation: perfect-smile 2s ease-out forwards;
             pointer-events: none;
         }
-
         @keyframes perfect-smile {
             0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
             20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
@@ -195,8 +287,8 @@
 <body>
     <div id="gameContainer">
         <canvas id="gameCanvas" width="360" height="640"></canvas>
+        <div id="toolCursor" class="cursor-brush"></div>
         <div id="ui">
-            <div id="hud">
                 <div id="score">Score: 0</div>
                 <div id="comfort">❤️ <span id="comfortValue">100</span></div>
                 <div id="timer">⏰ <span id="timerValue">60</span></div>
@@ -236,8 +328,9 @@
                 this.particles = [];
                 this.problems = [];
                 
-                this.mouse = { x: 0, y: 0, down: false, touches: 0 };
+                this.mouse = { x: 0, y: 0, down: false, touches: 0, toolX: 0, toolY: 0 };
                 this.toolbarTimeout = null;
+                this.toolCursor = document.getElementById('toolCursor');
                 
                 this.init();
             }
@@ -306,6 +399,15 @@
                 this.mouse.x = clientX - rect.left;
                 this.mouse.y = clientY - rect.top;
                 
+                // Position tool cursor offset below finger
+                this.mouse.toolX = this.mouse.x;
+                this.mouse.toolY = this.mouse.y - 60; // Offset above touch point
+                
+                // Update visual cursor
+                this.toolCursor.style.left = (rect.left + this.mouse.x - 15) + 'px';
+                this.toolCursor.style.top = (rect.top + this.mouse.toolY) + 'px';
+                this.toolCursor.style.opacity = this.mouse.down ? '1' : '0';
+                
                 if (this.mouse.down) {
                     this.useTool();
                 }
@@ -315,6 +417,9 @@
                 e.preventDefault();
                 this.mouse.down = false;
                 this.mouse.touches = 0;
+                
+                // Hide tool cursor
+                this.toolCursor.style.opacity = '0';
                 
                 if (this.currentTool === 'drill' && this.drillCharging) {
                     this.drillCharging = false;
@@ -331,6 +436,9 @@
                 this.currentTool = tool;
                 document.querySelectorAll('.tool').forEach(t => t.classList.remove('active'));
                 document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
+                
+                // Update cursor appearance
+                this.toolCursor.className = `cursor-${tool}`;
                 
                 this.vibrate(30);
             }
@@ -354,48 +462,58 @@
                 this.teeth = [];
                 this.problems = [];
                 
-                // Generate upper teeth (8)
+                // Generate upper teeth (8) - positioned on upper gums
                 for (let i = 0; i < 8; i++) {
                     const x = 60 + i * 30 + Math.random() * 10 - 5;
-                    const y = 200 + Math.random() * 20 - 10;
+                    const y = 270 + Math.random() * 15 - 7; // Fixed: positioned on upper gums
                     const width = 20 + Math.random() * 8;
                     const height = 25 + Math.random() * 10;
                     
                     this.teeth.push({
                         x, y, width, height,
                         type: 'upper',
-                        crooked: Math.random() * 10 - 5
+                        crooked: Math.random() * 10 - 5,
+                        stained: Math.random() < 0.3 ? 0.3 + Math.random() * 0.4 : 0
                     });
                 }
                 
-                // Generate lower teeth (8)
+                // Generate lower teeth (8) - positioned on lower gums  
                 for (let i = 0; i < 8; i++) {
                     const x = 60 + i * 30 + Math.random() * 10 - 5;
-                    const y = 350 + Math.random() * 20 - 10;
+                    const y = 340 + Math.random() * 15 - 7; // Adjusted for better positioning
                     const width = 20 + Math.random() * 8;
                     const height = 25 + Math.random() * 10;
                     
                     this.teeth.push({
                         x, y, width, height,
                         type: 'lower',
-                        crooked: Math.random() * 10 - 5
+                        crooked: Math.random() * 10 - 5,
+                        stained: Math.random() < 0.3 ? 0.3 + Math.random() * 0.4 : 0
                     });
                 }
                 
-                // Generate dental problems
-                const problemCount = 8 + Math.floor(Math.random() * 8);
+                // Generate dental problems with more variety
+                const problemCount = 6 + Math.floor(Math.random() * 10);
                 for (let i = 0; i < problemCount; i++) {
                     const tooth = this.teeth[Math.floor(Math.random() * this.teeth.length)];
                     const types = ['plaque', 'tartar', 'cavity'];
-                    const type = types[Math.floor(Math.random() * types.length)];
+                    let type = types[Math.floor(Math.random() * types.length)];
+                    
+                    // Bias toward more plaque for better flow
+                    if (Math.random() < 0.5) type = 'plaque';
+                    
+                    const problemX = tooth.x + Math.random() * tooth.width;
+                    const problemY = tooth.y + Math.random() * tooth.height;
                     
                     this.problems.push({
-                        x: tooth.x + Math.random() * tooth.width,
-                        y: tooth.y + Math.random() * tooth.height,
+                        x: problemX,
+                        y: problemY,
                         type: type,
-                        size: 5 + Math.random() * 10,
-                        health: type === 'cavity' ? 100 : 50,
-                        maxHealth: type === 'cavity' ? 100 : 50
+                        size: type === 'cavity' ? 3 + Math.random() * 4 : 4 + Math.random() * 6,
+                        health: type === 'cavity' ? 80 + Math.random() * 40 : 30 + Math.random() * 30,
+                        maxHealth: type === 'cavity' ? 100 : 50,
+                        pulsePhase: Math.random() * Math.PI * 2,
+                        thickness: type === 'tartar' ? 2 + Math.random() * 3 : 1
                     });
                 }
             }
@@ -437,12 +555,26 @@
                     this.drillHeat = Math.max(0, this.drillHeat - 0.5);
                 }
                 
-                // Update particles
+                // Update particles with enhanced physics
                 this.particles = this.particles.filter(particle => {
-                    particle.life -= 0.02;
+                    particle.life -= particle.water ? 0.025 : 0.02;
                     particle.y += particle.vy;
-                    particle.vy += 0.5; // gravity
+                    particle.vy += particle.gravity || 0.5;
                     particle.x += particle.vx;
+                    
+                    // Air resistance
+                    particle.vx *= 0.98;
+                    
+                    // Rotation for chunky particles
+                    if (particle.rotation !== undefined) {
+                        particle.rotation += particle.rotationSpeed;
+                    }
+                    
+                    // Bounce off mouth floor
+                    if (particle.y > 400 && particle.vy > 0) {
+                        particle.vy *= -0.3;
+                        particle.y = 400;
+                    }
                     
                     return particle.life > 0;
                 });
@@ -498,55 +630,117 @@
             }
             
             drawTeeth() {
-                this.ctx.fillStyle = '#ffffcc';
-                this.ctx.strokeStyle = '#ccccaa';
-                this.ctx.lineWidth = 1;
-                
                 this.teeth.forEach(tooth => {
+                    // Base tooth color with staining
+                    const baseColor = tooth.stained > 0 
+                        ? `hsl(60, ${Math.floor(60 - tooth.stained * 40)}%, ${Math.floor(95 - tooth.stained * 20)}%)`
+                        : '#ffffcc';
+                    
+                    this.ctx.fillStyle = baseColor;
+                    this.ctx.strokeStyle = '#ccccaa';
+                    this.ctx.lineWidth = 1;
+                    
                     this.ctx.save();
                     this.ctx.translate(tooth.x + tooth.width/2, tooth.y + tooth.height/2);
                     this.ctx.rotate(tooth.crooked * Math.PI / 180);
+                    
+                    // Main tooth shape
                     this.ctx.fillRect(-tooth.width/2, -tooth.height/2, tooth.width, tooth.height);
                     this.ctx.strokeRect(-tooth.width/2, -tooth.height/2, tooth.width, tooth.height);
+                    
+                    // Tooth shine effect
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                    this.ctx.fillRect(-tooth.width/2 + 2, -tooth.height/2 + 2, tooth.width * 0.3, tooth.height * 0.6);
+                    
                     this.ctx.restore();
                 });
             }
             
             drawProblems() {
+                const time = Date.now() * 0.005;
+                
                 this.problems.forEach(problem => {
+                    this.ctx.save();
+                    this.ctx.translate(problem.x, problem.y);
+                    
+                    let baseColor, pulseIntensity = 1;
+                    
                     switch(problem.type) {
                         case 'plaque':
-                            this.ctx.fillStyle = '#ffff99';
+                            baseColor = '#e6e600'; // More vivid yellow
+                            pulseIntensity = 0.8 + 0.2 * Math.sin(time + problem.pulsePhase);
                             break;
                         case 'tartar':
-                            this.ctx.fillStyle = '#8b4513';
-                            break;
+                            baseColor = '#5d2e0a'; // Darker, more gross brown
+                            // Tartar has rough, chunky appearance
+                            this.ctx.fillStyle = baseColor;
+                            for (let i = 0; i < problem.thickness; i++) {
+                                const offset = (i - problem.thickness/2) * 1.5;
+                                this.ctx.beginPath();
+                                this.ctx.arc(offset, offset * 0.5, problem.size * (0.7 + i * 0.1), 0, Math.PI * 2);
+                                this.ctx.fill();
+                            }
+                            this.ctx.restore();
+                            return;
                         case 'cavity':
-                            this.ctx.fillStyle = '#1a1a1a';
+                            baseColor = '#0d0d0d'; // Deep black
+                            pulseIntensity = 0.7 + 0.3 * Math.sin(time * 2 + problem.pulsePhase);
                             break;
                     }
                     
+                    const size = problem.size * pulseIntensity;
+                    this.ctx.fillStyle = baseColor;
                     this.ctx.beginPath();
-                    this.ctx.arc(problem.x, problem.y, problem.size, 0, Math.PI * 2);
+                    this.ctx.arc(0, 0, size, 0, Math.PI * 2);
                     this.ctx.fill();
                     
                     // Health indicator for cavities
                     if (problem.type === 'cavity' && problem.health < problem.maxHealth) {
                         const healthRatio = problem.health / problem.maxHealth;
-                        this.ctx.fillStyle = `rgba(255, 0, 0, ${1 - healthRatio})`;
+                        this.ctx.fillStyle = `rgba(255, 50, 50, ${(1 - healthRatio) * 0.8})`;
                         this.ctx.beginPath();
-                        this.ctx.arc(problem.x, problem.y, problem.size, 0, Math.PI * 2);
+                        this.ctx.arc(0, 0, size, 0, Math.PI * 2);
                         this.ctx.fill();
                     }
+                    
+                    // Nasty glow effect for all problems
+                    if (problem.type === 'plaque') {
+                        this.ctx.shadowColor = '#e6e600';
+                        this.ctx.shadowBlur = 5;
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, 0, size * 1.2, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.shadowBlur = 0;
+                    }
+                    
+                    this.ctx.restore();
                 });
             }
             
             drawParticles() {
                 this.particles.forEach(particle => {
+                    this.ctx.save();
+                    this.ctx.translate(particle.x, particle.y);
+                    
+                    if (particle.rotation !== undefined) {
+                        this.ctx.rotate(particle.rotation * Math.PI / 180);
+                    }
+                    
                     this.ctx.fillStyle = `rgba(${particle.color}, ${particle.life})`;
-                    this.ctx.beginPath();
-                    this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-                    this.ctx.fill();
+                    
+                    if (particle.water) {
+                        // Water droplets are more oval
+                        this.ctx.beginPath();
+                        this.ctx.ellipse(0, 0, particle.size, particle.size * 1.5, 0, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    } else {
+                        // Regular particles
+                        this.ctx.beginPath();
+                        this.ctx.arc(0, 0, particle.size, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                    
+                    this.ctx.restore();
                 });
             }
             
@@ -610,25 +804,32 @@
             }
             
             useBrush() {
-                const range = 15;
+                const range = 25; // Larger, more forgiving range
                 let cleaned = false;
                 
                 this.problems = this.problems.filter(problem => {
                     if (problem.type === 'plaque') {
                         const dist = Math.sqrt(
-                            (problem.x - this.mouse.x) ** 2 + 
-                            (problem.y - this.mouse.y) ** 2
+                            (problem.x - this.mouse.toolX) ** 2 + 
+                            (problem.y - this.mouse.toolY) ** 2
                         );
                         
                         if (dist < range) {
-                            problem.health -= 10;
-                            this.createParticles(problem.x, problem.y, '#ffff99');
+                            problem.health -= 25; // Much more aggressive damage
+                            
+                            this.createParticles(
+                                problem.x, problem.y, '230, 230, 0', 
+                                6, { speed: 2, gravity: 0.3 }
+                            );
+                            
+                            this.playSound('scrub');
                             cleaned = true;
                             
                             if (problem.health <= 0) {
                                 this.score += 10;
                                 this.comfort = Math.min(100, this.comfort + 1);
-                                this.vibrate(20);
+                                this.createSuccessEffect(problem.x, problem.y, '+10');
+                                this.vibrate(25);
                                 return false;
                             }
                         }
@@ -636,29 +837,36 @@
                     return true;
                 });
                 
-                if (!cleaned && Math.random() < 0.1) {
-                    this.comfort = Math.max(0, this.comfort - 2);
+                // Much less penalty for missing
+                if (!cleaned && Math.random() < 0.05) {
+                    this.comfort = Math.max(0, this.comfort - 1);
                 }
                 
                 this.updateHUD();
             }
             
             useScaler() {
-                const range = 12;
+                const range = 20; // Larger range
                 let cleaned = false;
                 
                 this.problems = this.problems.filter(problem => {
                     if (problem.type === 'tartar') {
                         const dist = Math.sqrt(
-                            (problem.x - this.mouse.x) ** 2 + 
-                            (problem.y - this.mouse.y) ** 2
+                            (problem.x - this.mouse.toolX) ** 2 + 
+                            (problem.y - this.mouse.toolY) ** 2
                         );
                         
                         if (dist < range) {
-                            this.createParticles(problem.x, problem.y, '139, 69, 19');
+                            // Instant removal for tartar - more satisfying
+                            this.createParticles(
+                                problem.x, problem.y, '93, 69, 19', 
+                                8, { speed: 3, gravity: 0.8, chunky: true }
+                            );
+                            this.createSuccessEffect(problem.x, problem.y, '+15');
+                            this.playSound('chip');
                             this.score += 15;
                             this.comfort = Math.min(100, this.comfort + 1);
-                            this.vibrate(40);
+                            this.vibrate(50);
                             cleaned = true;
                             return false;
                         }
@@ -666,7 +874,8 @@
                     return true;
                 });
                 
-                if (!cleaned && Math.random() < 0.05) {
+                // Less penalty
+                if (!cleaned && Math.random() < 0.03) {
                     this.comfort = Math.max(0, this.comfort - 2);
                 }
                 
@@ -674,27 +883,28 @@
             }
             
             performDrill() {
-                const range = 12;
+                const range = 15;
                 let drilled = false;
                 
                 this.problems = this.problems.filter(problem => {
                     if (problem.type === 'cavity') {
                         const dist = Math.sqrt(
-                            (problem.x - this.mouse.x) ** 2 + 
-                            (problem.y - this.mouse.y) ** 2
+                            (problem.x - this.mouse.toolX) ** 2 + 
+                            (problem.y - this.mouse.toolY) ** 2
                         );
                         
                         if (dist < range) {
-                            const damage = this.drillCharge;
+                            const damage = this.drillCharge * 1.2; // More effective
                             problem.health -= damage;
-                            this.drillHeat = Math.min(100, this.drillHeat + 30);
-                            this.createParticles(problem.x, problem.y, '26, 26, 26');
+                            this.drillHeat = Math.min(100, this.drillHeat + 25);
+                            this.createParticles(problem.x, problem.y, '26, 26, 26', 6);
                             this.screenShake();
                             drilled = true;
                             
                             if (problem.health <= 0) {
                                 this.score += 25;
                                 this.comfort = Math.min(100, this.comfort + 2);
+                                this.createSuccessEffect(problem.x, problem.y, '+25');
                                 this.vibrate(60);
                                 return false;
                             }
@@ -704,42 +914,135 @@
                 });
                 
                 if (!drilled) {
-                    this.comfort = Math.max(0, this.comfort - 5);
+                    this.comfort = Math.max(0, this.comfort - 3); // Less harsh
                 }
                 
                 this.updateHUD();
             }
             
             useRinse() {
-                // Clear drill heat
-                this.drillHeat = Math.max(0, this.drillHeat - 20);
+                const range = 50; // Much larger range for rinse
                 
-                // Remove some particles
-                this.particles = this.particles.filter(() => Math.random() < 0.7);
+                this.drillHeat = Math.max(0, this.drillHeat - 40);
                 
-                // Create water effect
-                for (let i = 0; i < 10; i++) {
+                const beforeCount = this.particles.length;
+                this.particles = this.particles.filter(() => Math.random() < 0.3);
+                const washedAway = beforeCount - this.particles.length;
+                
+                // Create water spray at tool position
+                for (let i = 0; i < 12; i++) {
                     this.createParticles(
-                        this.mouse.x + (Math.random() - 0.5) * 30,
-                        this.mouse.y + (Math.random() - 0.5) * 30,
-                        '100, 150, 255'
+                        this.mouse.toolX + (Math.random() - 0.5) * 30,
+                        this.mouse.toolY + (Math.random() - 0.5) * 30,
+                        '100, 180, 255',
+                        1,
+                        { speed: 4, gravity: 0.2, water: true }
                     );
                 }
                 
-                this.vibrate(30);
+                // Use tool position for rinse effects
+                this.problems.forEach(problem => {
+                    const dist = Math.sqrt(
+                        (problem.x - this.mouse.toolX) ** 2 + 
+                        (problem.y - this.mouse.toolY) ** 2
+                    );
+                    
+                    if (dist < range && problem.type === 'plaque') {
+                        problem.health -= 5; // More effective
+                        if (problem.health <= 0) {
+                            this.score += 5;
+                            this.createSuccessEffect(problem.x, problem.y, '+5');
+                        }
+                    }
+                });
+                
+                this.problems = this.problems.filter(p => p.health > 0);
+                
+                if (washedAway > 3) {
+                    this.createSuccessEffect(this.mouse.toolX, this.mouse.toolY, `Clean!`);
+                    this.score += Math.floor(washedAway / 2);
+                }
+                
+                this.playSound('rinse');
+                this.vibrate(40);
+                this.updateHUD();
             }
             
-            createParticles(x, y, color) {
-                for (let i = 0; i < 5; i++) {
-                    this.particles.push({
+            createParticles(x, y, color, count = 5, options = {}) {
+                const { speed = 2, gravity = 0.5, chunky = false, water = false } = options;
+                
+                for (let i = 0; i < count; i++) {
+                    const particle = {
                         x: x + (Math.random() - 0.5) * 10,
                         y: y + (Math.random() - 0.5) * 10,
-                        vx: (Math.random() - 0.5) * 4,
-                        vy: Math.random() * -3 - 1,
-                        size: Math.random() * 3 + 1,
-                        life: 1,
-                        color: color
-                    });
+                        vx: (Math.random() - 0.5) * speed * 2,
+                        vy: Math.random() * -speed - 1,
+                        size: chunky ? Math.random() * 4 + 2 : Math.random() * 3 + 1,
+                        life: water ? 0.6 : 1,
+                        color: color,
+                        gravity: gravity,
+                        rotation: chunky ? Math.random() * 360 : 0,
+                        rotationSpeed: chunky ? (Math.random() - 0.5) * 10 : 0,
+                        water: water
+                    };
+                    this.particles.push(particle);
+                }
+            }
+
+            createSuccessEffect(x, y, text) {
+                const effect = document.createElement('div');
+                effect.className = 'particle';
+                effect.textContent = text;
+                effect.style.left = x + 'px';
+                effect.style.top = y + 'px';
+                effect.style.color = '#4CAF50';
+                effect.style.fontSize = '14px';
+                effect.style.fontWeight = 'bold';
+                document.getElementById('ui').appendChild(effect);
+                
+                setTimeout(() => effect.remove(), 1000);
+            }
+
+            createWarningEffect(x, y, text) {
+                const effect = document.createElement('div');
+                effect.className = 'particle';
+                effect.textContent = text;
+                effect.style.left = x + 'px';
+                effect.style.top = y + 'px';
+                effect.style.color = '#ff6b6b';
+                effect.style.fontSize = '12px';
+                effect.style.fontWeight = 'bold';
+                document.getElementById('ui').appendChild(effect);
+                
+                setTimeout(() => effect.remove(), 1000);
+            }
+
+            playSound(type) {
+                // Audio context simulation with visual feedback
+                const colors = {
+                    'scrub': '#FFE135',
+                    'chip': '#8B4513', 
+                    'drill': '#FF4757',
+                    'rinse': '#3DAFFF'
+                };
+                
+                if (colors[type]) {
+                    const flash = document.createElement('div');
+                    flash.style.position = 'absolute';
+                    flash.style.top = '0';
+                    flash.style.left = '0';
+                    flash.style.width = '100%';
+                    flash.style.height = '100%';
+                    flash.style.background = colors[type];
+                    flash.style.opacity = '0.1';
+                    flash.style.pointerEvents = 'none';
+                    flash.style.transition = 'opacity 0.1s ease';
+                    document.getElementById('gameContainer').appendChild(flash);
+                    
+                    setTimeout(() => {
+                        flash.style.opacity = '0';
+                        setTimeout(() => flash.remove(), 100);
+                    }, 50);
                 }
             }
             
