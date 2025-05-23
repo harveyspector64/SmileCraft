@@ -1,1 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmileCraft</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #gameContainer {
+            width: 360px;
+            height: 640px;
+            position: relative;
+            background: #f0f8ff;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            background: #f0f8ff;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #toolbar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            background: rgba(255,255,255,0.9);
+            padding: 15px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            pointer-events: auto;
+            transition: opacity 0.3s ease;
+        }
+
+        .tool {
+            width: 50px;
+            height: 50px;
+            border: none;
+            border-radius: 12px;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: rgba(255,255,255,0.8);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .tool:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+        }
+
+        .tool.active {
+            background: #4CAF50;
+            color: white;
+            transform: scale(1.1);
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: auto;
+        }
+
+        #score, #comfort, #timer {
+            background: rgba(255,255,255,0.9);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        #comfort {
+            background: linear-gradient(90deg, #ff4757, #ffa502, #2ed573);
+            background-size: 100% 100%;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #comfort::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: var(--comfort-width, 100%);
+            background: rgba(255,255,255,0.3);
+            transition: width 0.3s ease;
+        }
+
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.95);
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            display: none;
+            pointer-events: auto;
+        }
+
+        #restartBtn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.2s ease;
+        }
+
+        #restartBtn:hover {
+            background: #45a049;
+        }
+
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            font-size: 12px;
+            font-weight: bold;
+            color: #ff6b6b;
+            animation: particle-float 1s ease-out forwards;
+        }
+
+        @keyframes particle-float {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-30px) scale(0.5); }
+        }
+
+        .perfect-smile {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            animation: perfect-smile 2s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes perfect-smile {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+            20% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+            80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="360" height="640"></canvas>
+        <div id="ui">
+            <div id="hud">
+                <div id="score">Score: 0</div>
+                <div id="comfort">❤️ <span id="comfortValue">100</span></div>
+                <div id="timer">⏰ <span id="timerValue">60</span></div>
+            </div>
+            <div id="toolbar">
+                <button class="tool active" data-tool="brush">🪥</button>
+                <button class="tool" data-tool="scaler">⛏️</button>
+                <button class="tool" data-tool="drill">🛠️</button>
+                <button class="tool" data-tool="rinse">💧</button>
+            </div>
+            <div id="gameOver">
+                <h2 id="gameOverTitle">Time's Up!</h2>
+                <p id="finalScore">Final Score: 0</p>
+                <button id="restartBtn">New Patient</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SmileCraft {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.width = 360;
+                this.height = 640;
+                
+                this.currentTool = 'brush';
+                this.score = 0;
+                this.comfort = 100;
+                this.timeLeft = 60;
+                this.gameRunning = false;
+                this.drillHeat = 0;
+                this.drillCharging = false;
+                this.drillCharge = 0;
+                
+                this.teeth = [];
+                this.particles = [];
+                this.problems = [];
+                
+                this.mouse = { x: 0, y: 0, down: false, touches: 0 };
+                this.toolbarTimeout = null;
+                
+                this.init();
+            }
+            
+            init() {
+                this.setupEventListeners();
+                this.generateMouth();
+                this.startGame();
+            }
+            
+            setupEventListeners() {
+                // Tool selection
+                document.querySelectorAll('.tool').forEach(tool => {
+                    tool.addEventListener('click', (e) => {
+                        this.selectTool(e.target.dataset.tool);
+                    });
+                });
+                
+                // Mouse/touch events
+                this.canvas.addEventListener('mousedown', this.handleStart.bind(this));
+                this.canvas.addEventListener('mousemove', this.handleMove.bind(this));
+                this.canvas.addEventListener('mouseup', this.handleEnd.bind(this));
+                
+                this.canvas.addEventListener('touchstart', this.handleStart.bind(this));
+                this.canvas.addEventListener('touchmove', this.handleMove.bind(this));
+                this.canvas.addEventListener('touchend', this.handleEnd.bind(this));
+                
+                // Restart button
+                document.getElementById('restartBtn').addEventListener('click', () => {
+                    this.restartGame();
+                });
+                
+                // Prevent context menu
+                this.canvas.addEventListener('contextmenu', e => e.preventDefault());
+            }
+            
+            handleStart(e) {
+                e.preventDefault();
+                if (!this.gameRunning) return;
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                
+                this.mouse.x = clientX - rect.left;
+                this.mouse.y = clientY - rect.top;
+                this.mouse.down = true;
+                this.mouse.touches = e.touches ? e.touches.length : 1;
+                
+                if (this.currentTool === 'drill') {
+                    this.drillCharging = true;
+                    this.drillCharge = 0;
+                }
+                
+                this.showToolbar();
+            }
+            
+            handleMove(e) {
+                e.preventDefault();
+                if (!this.gameRunning) return;
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                
+                this.mouse.x = clientX - rect.left;
+                this.mouse.y = clientY - rect.top;
+                
+                if (this.mouse.down) {
+                    this.useTool();
+                }
+            }
+            
+            handleEnd(e) {
+                e.preventDefault();
+                this.mouse.down = false;
+                this.mouse.touches = 0;
+                
+                if (this.currentTool === 'drill' && this.drillCharging) {
+                    this.drillCharging = false;
+                    if (this.drillCharge > 30) {
+                        this.performDrill();
+                    }
+                    this.drillCharge = 0;
+                }
+                
+                this.hideToolbarDelayed();
+            }
+            
+            selectTool(tool) {
+                this.currentTool = tool;
+                document.querySelectorAll('.tool').forEach(t => t.classList.remove('active'));
+                document.querySelector(`[data-tool="${tool}"]`).classList.add('active');
+                
+                this.vibrate(30);
+            }
+            
+            showToolbar() {
+                const toolbar = document.getElementById('toolbar');
+                toolbar.style.opacity = '1';
+                if (this.toolbarTimeout) {
+                    clearTimeout(this.toolbarTimeout);
+                }
+            }
+            
+            hideToolbarDelayed() {
+                this.toolbarTimeout = setTimeout(() => {
+                    const toolbar = document.getElementById('toolbar');
+                    toolbar.style.opacity = '0.7';
+                }, 3000);
+            }
+            
+            generateMouth() {
+                this.teeth = [];
+                this.problems = [];
+                
+                // Generate upper teeth (8)
+                for (let i = 0; i < 8; i++) {
+                    const x = 60 + i * 30 + Math.random() * 10 - 5;
+                    const y = 200 + Math.random() * 20 - 10;
+                    const width = 20 + Math.random() * 8;
+                    const height = 25 + Math.random() * 10;
+                    
+                    this.teeth.push({
+                        x, y, width, height,
+                        type: 'upper',
+                        crooked: Math.random() * 10 - 5
+                    });
+                }
+                
+                // Generate lower teeth (8)
+                for (let i = 0; i < 8; i++) {
+                    const x = 60 + i * 30 + Math.random() * 10 - 5;
+                    const y = 350 + Math.random() * 20 - 10;
+                    const width = 20 + Math.random() * 8;
+                    const height = 25 + Math.random() * 10;
+                    
+                    this.teeth.push({
+                        x, y, width, height,
+                        type: 'lower',
+                        crooked: Math.random() * 10 - 5
+                    });
+                }
+                
+                // Generate dental problems
+                const problemCount = 8 + Math.floor(Math.random() * 8);
+                for (let i = 0; i < problemCount; i++) {
+                    const tooth = this.teeth[Math.floor(Math.random() * this.teeth.length)];
+                    const types = ['plaque', 'tartar', 'cavity'];
+                    const type = types[Math.floor(Math.random() * types.length)];
+                    
+                    this.problems.push({
+                        x: tooth.x + Math.random() * tooth.width,
+                        y: tooth.y + Math.random() * tooth.height,
+                        type: type,
+                        size: 5 + Math.random() * 10,
+                        health: type === 'cavity' ? 100 : 50,
+                        maxHealth: type === 'cavity' ? 100 : 50
+                    });
+                }
+            }
+            
+            startGame() {
+                this.gameRunning = true;
+                this.gameLoop();
+                this.startTimer();
+            }
+            
+            startTimer() {
+                this.timerInterval = setInterval(() => {
+                    this.timeLeft--;
+                    document.getElementById('timerValue').textContent = this.timeLeft;
+                    
+                    if (this.timeLeft <= 0) {
+                        this.endGame();
+                    }
+                }, 1000);
+            }
+            
+            gameLoop() {
+                if (!this.gameRunning) return;
+                
+                this.update();
+                this.render();
+                
+                requestAnimationFrame(() => this.gameLoop());
+            }
+            
+            update() {
+                // Update drill charging
+                if (this.drillCharging) {
+                    this.drillCharge = Math.min(100, this.drillCharge + 2);
+                }
+                
+                // Cool down drill heat
+                if (this.drillHeat > 0) {
+                    this.drillHeat = Math.max(0, this.drillHeat - 0.5);
+                }
+                
+                // Update particles
+                this.particles = this.particles.filter(particle => {
+                    particle.life -= 0.02;
+                    particle.y += particle.vy;
+                    particle.vy += 0.5; // gravity
+                    particle.x += particle.vx;
+                    
+                    return particle.life > 0;
+                });
+                
+                // Check win condition
+                if (this.problems.length === 0 && this.gameRunning) {
+                    this.perfectSmile();
+                }
+            }
+            
+            render() {
+                // Clear canvas
+                this.ctx.fillStyle = '#f0f8ff';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+                
+                // Draw mouth background
+                this.drawMouth();
+                
+                // Draw teeth
+                this.drawTeeth();
+                
+                // Draw problems
+                this.drawProblems();
+                
+                // Draw particles
+                this.drawParticles();
+                
+                // Draw tool cursor
+                this.drawToolCursor();
+                
+                // Draw drill heat bar
+                if (this.drillHeat > 0 || this.drillCharging) {
+                    this.drawDrillHeat();
+                }
+            }
+            
+            drawMouth() {
+                // Draw mouth opening
+                this.ctx.fillStyle = '#2c1810';
+                this.ctx.beginPath();
+                this.ctx.ellipse(180, 320, 140, 80, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Draw gums
+                this.ctx.fillStyle = '#ff9999';
+                this.ctx.beginPath();
+                this.ctx.ellipse(180, 280, 120, 40, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                this.ctx.beginPath();
+                this.ctx.ellipse(180, 360, 120, 40, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+            
+            drawTeeth() {
+                this.ctx.fillStyle = '#ffffcc';
+                this.ctx.strokeStyle = '#ccccaa';
+                this.ctx.lineWidth = 1;
+                
+                this.teeth.forEach(tooth => {
+                    this.ctx.save();
+                    this.ctx.translate(tooth.x + tooth.width/2, tooth.y + tooth.height/2);
+                    this.ctx.rotate(tooth.crooked * Math.PI / 180);
+                    this.ctx.fillRect(-tooth.width/2, -tooth.height/2, tooth.width, tooth.height);
+                    this.ctx.strokeRect(-tooth.width/2, -tooth.height/2, tooth.width, tooth.height);
+                    this.ctx.restore();
+                });
+            }
+            
+            drawProblems() {
+                this.problems.forEach(problem => {
+                    switch(problem.type) {
+                        case 'plaque':
+                            this.ctx.fillStyle = '#ffff99';
+                            break;
+                        case 'tartar':
+                            this.ctx.fillStyle = '#8b4513';
+                            break;
+                        case 'cavity':
+                            this.ctx.fillStyle = '#1a1a1a';
+                            break;
+                    }
+                    
+                    this.ctx.beginPath();
+                    this.ctx.arc(problem.x, problem.y, problem.size, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    // Health indicator for cavities
+                    if (problem.type === 'cavity' && problem.health < problem.maxHealth) {
+                        const healthRatio = problem.health / problem.maxHealth;
+                        this.ctx.fillStyle = `rgba(255, 0, 0, ${1 - healthRatio})`;
+                        this.ctx.beginPath();
+                        this.ctx.arc(problem.x, problem.y, problem.size, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                });
+            }
+            
+            drawParticles() {
+                this.particles.forEach(particle => {
+                    this.ctx.fillStyle = `rgba(${particle.color}, ${particle.life})`;
+                    this.ctx.beginPath();
+                    this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                    this.ctx.fill();
+                });
+            }
+            
+            drawToolCursor() {
+                if (!this.mouse.down || !this.gameRunning) return;
+                
+                const size = this.currentTool === 'drill' ? 12 : 8;
+                
+                this.ctx.strokeStyle = '#4CAF50';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(this.mouse.x, this.mouse.y, size, 0, Math.PI * 2);
+                this.ctx.stroke();
+                
+                if (this.currentTool === 'drill' && this.drillCharging) {
+                    const chargeSize = size + (this.drillCharge / 100) * 10;
+                    this.ctx.strokeStyle = `rgba(255, 0, 0, ${this.drillCharge / 100})`;
+                    this.ctx.beginPath();
+                    this.ctx.arc(this.mouse.x, this.mouse.y, chargeSize, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                }
+            }
+            
+            drawDrillHeat() {
+                const barWidth = 100;
+                const barHeight = 10;
+                const x = 130;
+                const y = 100;
+                
+                // Background
+                this.ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                this.ctx.fillRect(x, y, barWidth, barHeight);
+                
+                // Heat level
+                const heatRatio = this.drillCharging ? this.drillCharge / 100 : this.drillHeat / 100;
+                this.ctx.fillStyle = this.drillHeat > 80 ? '#ff4757' : '#ffa502';
+                this.ctx.fillRect(x, y, barWidth * heatRatio, barHeight);
+                
+                // Border
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(x, y, barWidth, barHeight);
+            }
+            
+            useTool() {
+                if (!this.gameRunning) return;
+                
+                switch(this.currentTool) {
+                    case 'brush':
+                        this.useBrush();
+                        break;
+                    case 'scaler':
+                        this.useScaler();
+                        break;
+                    case 'rinse':
+                        if (this.mouse.touches >= 2) {
+                            this.useRinse();
+                        }
+                        break;
+                }
+            }
+            
+            useBrush() {
+                const range = 15;
+                let cleaned = false;
+                
+                this.problems = this.problems.filter(problem => {
+                    if (problem.type === 'plaque') {
+                        const dist = Math.sqrt(
+                            (problem.x - this.mouse.x) ** 2 + 
+                            (problem.y - this.mouse.y) ** 2
+                        );
+                        
+                        if (dist < range) {
+                            problem.health -= 10;
+                            this.createParticles(problem.x, problem.y, '#ffff99');
+                            cleaned = true;
+                            
+                            if (problem.health <= 0) {
+                                this.score += 10;
+                                this.comfort = Math.min(100, this.comfort + 1);
+                                this.vibrate(20);
+                                return false;
+                            }
+                        }
+                    }
+                    return true;
+                });
+                
+                if (!cleaned && Math.random() < 0.1) {
+                    this.comfort = Math.max(0, this.comfort - 2);
+                }
+                
+                this.updateHUD();
+            }
+            
+            useScaler() {
+                const range = 12;
+                let cleaned = false;
+                
+                this.problems = this.problems.filter(problem => {
+                    if (problem.type === 'tartar') {
+                        const dist = Math.sqrt(
+                            (problem.x - this.mouse.x) ** 2 + 
+                            (problem.y - this.mouse.y) ** 2
+                        );
+                        
+                        if (dist < range) {
+                            this.createParticles(problem.x, problem.y, '139, 69, 19');
+                            this.score += 15;
+                            this.comfort = Math.min(100, this.comfort + 1);
+                            this.vibrate(40);
+                            cleaned = true;
+                            return false;
+                        }
+                    }
+                    return true;
+                });
+                
+                if (!cleaned && Math.random() < 0.05) {
+                    this.comfort = Math.max(0, this.comfort - 2);
+                }
+                
+                this.updateHUD();
+            }
+            
+            performDrill() {
+                const range = 12;
+                let drilled = false;
+                
+                this.problems = this.problems.filter(problem => {
+                    if (problem.type === 'cavity') {
+                        const dist = Math.sqrt(
+                            (problem.x - this.mouse.x) ** 2 + 
+                            (problem.y - this.mouse.y) ** 2
+                        );
+                        
+                        if (dist < range) {
+                            const damage = this.drillCharge;
+                            problem.health -= damage;
+                            this.drillHeat = Math.min(100, this.drillHeat + 30);
+                            this.createParticles(problem.x, problem.y, '26, 26, 26');
+                            this.screenShake();
+                            drilled = true;
+                            
+                            if (problem.health <= 0) {
+                                this.score += 25;
+                                this.comfort = Math.min(100, this.comfort + 2);
+                                this.vibrate(60);
+                                return false;
+                            }
+                        }
+                    }
+                    return true;
+                });
+                
+                if (!drilled) {
+                    this.comfort = Math.max(0, this.comfort - 5);
+                }
+                
+                this.updateHUD();
+            }
+            
+            useRinse() {
+                // Clear drill heat
+                this.drillHeat = Math.max(0, this.drillHeat - 20);
+                
+                // Remove some particles
+                this.particles = this.particles.filter(() => Math.random() < 0.7);
+                
+                // Create water effect
+                for (let i = 0; i < 10; i++) {
+                    this.createParticles(
+                        this.mouse.x + (Math.random() - 0.5) * 30,
+                        this.mouse.y + (Math.random() - 0.5) * 30,
+                        '100, 150, 255'
+                    );
+                }
+                
+                this.vibrate(30);
+            }
+            
+            createParticles(x, y, color) {
+                for (let i = 0; i < 5; i++) {
+                    this.particles.push({
+                        x: x + (Math.random() - 0.5) * 10,
+                        y: y + (Math.random() - 0.5) * 10,
+                        vx: (Math.random() - 0.5) * 4,
+                        vy: Math.random() * -3 - 1,
+                        size: Math.random() * 3 + 1,
+                        life: 1,
+                        color: color
+                    });
+                }
+            }
+            
+            screenShake() {
+                const container = document.getElementById('gameContainer');
+                container.style.transform = 'translate(2px, 2px)';
+                setTimeout(() => {
+                    container.style.transform = 'translate(-2px, -2px)';
+                    setTimeout(() => {
+                        container.style.transform = 'translate(0, 0)';
+                    }, 50);
+                }, 50);
+            }
+            
+            vibrate(duration) {
+                if (navigator.vibrate) {
+                    navigator.vibrate(duration);
+                }
+            }
+            
+            updateHUD() {
+                document.getElementById('score').textContent = `Score: ${this.score}`;
+                document.getElementById('comfortValue').textContent = this.comfort;
+                
+                const comfortEl = document.getElementById('comfort');
+                comfortEl.style.setProperty('--comfort-width', `${this.comfort}%`);
+                
+                if (this.comfort <= 0) {
+                    this.endGame();
+                }
+            }
+            
+            perfectSmile() {
+                this.gameRunning = false;
+                
+                const bonus = Math.floor(this.timeLeft * 5) + Math.floor(this.comfort * 2);
+                this.score += bonus;
+                
+                const perfectEl = document.createElement('div');
+                perfectEl.className = 'perfect-smile';
+                perfectEl.innerHTML = `✨ PERFECT SMILE! ✨<br>Bonus: +${bonus}`;
+                document.getElementById('ui').appendChild(perfectEl);
+                
+                setTimeout(() => {
+                    perfectEl.remove();
+                    this.nextPatient();
+                }, 2000);
+                
+                this.vibrate([100, 50, 100, 50, 100]);
+            }
+            
+            nextPatient() {
+                this.generateMouth();
+                this.timeLeft = 60;
+                this.comfort = 100;
+                this.drillHeat = 0;
+                this.particles = [];
+                this.updateHUD();
+                this.startGame();
+            }
+            
+            endGame() {
+                this.gameRunning = false;
+                clearInterval(this.timerInterval);
+                
+                document.getElementById('gameOverTitle').textContent = 
+                    this.comfort <= 0 ? 'Patient Discomfort!' : "Time's Up!";
+                document.getElementById('finalScore').textContent = `Final Score: ${this.score}`;
+                document.getElementById('gameOver').style.display = 'block';
+            }
+            
+            restartGame() {
+                document.getElementById('gameOver').style.display = 'none';
+                this.score = 0;
+                this.comfort = 100;
+                this.timeLeft = 60;
+                this.drillHeat = 0;
+                this.particles = [];
+                this.generateMouth();
+                this.updateHUD();
+                this.startGame();
+            }
+        }
+        
+        // Start the game
+        new SmileCraft();
+    </script>
+</body>
+</html>
